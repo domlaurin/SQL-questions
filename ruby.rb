@@ -14,6 +14,8 @@ end
 
 
 
+
+
 class User
     attr_accessor :id, :fname, :lname
     def self.find_by_id(id)
@@ -56,7 +58,13 @@ class User
     def authored_replies
         Reply.find_by_user_id(@id)
     end
+
+    def followed_questions
+        QuestionFolllow.followed_questions_for_user_id(@id)
+    end
 end
+
+
 
 
 
@@ -99,7 +107,7 @@ class Question
     end
 
     def author
-        user = QuestionsDatabase.include.execute(<<-SQL, @author_id)
+        user = QuestionsDatabase.instance.execute(<<-SQL, @author_id)
         SELECT
             *
         FROM
@@ -115,10 +123,13 @@ class Question
     def replies
         Reply.find_by_question_id(@id)
     end
-    
 
-
+    def followed_questions
+        QuestionFolllow.followers_for_question_id(@id)
+    end
 end
+
+
 
 
 
@@ -144,7 +155,39 @@ class Question_follow
         @user_id = options['user_id']
         @question_id = options['question_id']
     end
+
+    def self.followers_for_question_id(question_id)
+        followers = QuestionsDatabase.instance.execute(<<-SQL, question_id)
+        SELECT 
+        *
+        FROM users
+        JOIN 
+        question_follows ON users.id = question_follows.user_id
+        WHERE
+        question_follows.question_id = ?
+        SQL
+        return nil unless followers.length > 0
+
+        followers.map{|user| User.new(user) }
+    end
+    
+    def self.followed_questions_for_user_id(user_id)
+        questions = QuestionsDatabase.instance.execute(<<-SQL, user_id)
+        SELECT
+        *
+        FROM
+        question_follows
+        JOIN questions ON question_follows.question_id = questions.id
+        WHERE
+        author_id = ?
+        SQL
+        return nil unless questions.length > 0
+
+        questions.map{|question| Questions.new(question)}
+    end
 end
+
+
 
 
 
@@ -212,7 +255,7 @@ class Reply
         SQL
         return nil unless user.length > 0
 
-        User.new(user)
+        User.new(user.first)
     end
 
     def question
@@ -226,7 +269,7 @@ class Reply
         SQL
         return nil unless question.length > 0
 
-        Question.new(question)
+        Question.new(question.first)
     end
 
     def parent_reply
@@ -240,7 +283,7 @@ class Reply
         SQL
         return nil unless reply.length > 0
 
-        Reply.new(reply)
+        Reply.new(reply.first)
     end
 
     def child_replies
@@ -255,9 +298,9 @@ class Reply
         return nil if children.empty?
         children.map{|child| Reply.new(child)}
     end
-
-
 end
+
+
 
 
 

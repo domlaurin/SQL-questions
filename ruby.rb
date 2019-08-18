@@ -66,6 +66,31 @@ class User
     def liked_questions
         Question_like.liked_questions_for_user_id(@id)
     end
+
+    def average_karma
+
+# Average Karma is pretty tough. Here are some hints:
+
+# First, write a single query that returns two things: the number of questions asked by a user and the number of likes on those questions.
+
+# I used a LEFT OUTER JOIN to combine the questions and question_likes table.
+# You need questions so you can filter by the author, and you need question_likes so you can count the number of likes.
+# I used a COUNT(DISTINCT(...)) to count the number of questions.
+# Note that a question that is liked multiple times will be repeated in the joined table.
+# I used a COUNT(column) to count the number of non-NULL entries in a column.
+# Note that a question that is never liked will take up one row in the joined table. How do we use COUNT(column) to not count this toward the total number of likes?
+# Next, divide the number of likes by the number of questions. Because COUNT returns two integers, and because integer division rounds down (3 / 2 == 1), we need to CAST one of the numbers to FLOAT. We can do this like so: CAST(value AS FLOAT).
+    average_karma = QuestionsDatabase.instance.execute(<<-SQL, @id)
+    SELECT
+    CAST(COUNT(question_likes.user_id) AS FLOAT) / COUNT(DISTINCT questions.id) AS average_value
+    FROM questions
+    LEFT OUTER JOIN
+        question_likes ON questions.id = question_likes.question_id
+    WHERE
+    questions.author_id = ?
+    SQL
+    average_karma.first
+    end
 end
 
 
@@ -392,11 +417,30 @@ class Question_like
         FROM 
         questions
         JOIN
-        question_likes ON question_likes.question_id = question.id
+        question_likes ON question_likes.question_id = questions.id
         WHERE
         question_likes.user_id = ?
         SQL
         questions.map{ |question| Question.new(question) }
+    end
+
+    def self.most_liked_questions(n)
+        questions = QuestionsDatabase.instance.execute(<<-SQL, n)
+        SELECT
+        *
+        FROM
+        questions
+        JOIN 
+        question_likes ON question_likes.question_id = questions.id
+        GROUP BY
+        question_likes.id
+        ORDER BY
+        COUNT(user_id) DESC
+        LIMIT
+        ?
+        SQL
+
+        questions.map {|question| Question.new(question)}
     end
 
     def initialize(options)

@@ -62,6 +62,10 @@ class User
     def followed_questions
         QuestionFolllow.followed_questions_for_user_id(@id)
     end
+
+    def liked_questions
+        Question_like.liked_questions_for_user_id(@id)
+    end
 end
 
 
@@ -99,6 +103,10 @@ class Question
         questions.map {|question| Question.new(question)}
     end
 
+    def self.most_followed(n)
+        QuestionFolllow.most_followed_questions(n)
+    end
+
     def initialize(options)
         @id = options['id']
         @title = options['title']
@@ -126,6 +134,14 @@ class Question
 
     def followed_questions
         QuestionFolllow.followers_for_question_id(@id)
+    end
+
+    def likers
+        Question_like.likers_for_question_id(@id)
+    end
+
+    def num_likes 
+        Question_like.num_likes_for_question_id(@id)
     end
 end
 
@@ -185,9 +201,24 @@ class Question_follow
 
         questions.map{|question| Questions.new(question)}
     end
+
+    def self.most_followed_questions(n)
+        most_followed_questions = QuestionsDatabase.instance.execute(<<-SQL, n)
+        SELECT 
+        *
+        FROM
+        questions
+        JOIN
+        question_follows ON questions.id = question_follows.question_id
+        GROUP BY
+        question_follows.question_id
+        ORDER BY
+        COUNT(question_follows.user_id) DESC
+        LIMIT ?
+        SQL
+        most_followed_questions.map{|question| Question.new(question)}
+    end
 end
-
-
 
 
 
@@ -318,6 +349,54 @@ class Question_like
         return nil unless question_like.length > 0
 
         Question_like.new(question_like.first)
+    end
+
+    def self.likers_for_question_id(question_id)
+        likers = QuestionsDatabase.instance.execute(<<-SQL, question_id)
+        SELECT
+        *
+        FROM 
+        users
+
+        JOIN
+        question_likes ON users.id = question_likes.user_id
+
+        WHERE
+        question_likes.question_id = ?
+        SQL
+
+        likers.map{|user| User.new(user)}
+    end
+
+    def self.num_likes_for_question_id(question_id)
+        likers = QuestionsDatabase.instance.execute(<<-SQL, question_id)
+        SELECT
+        COUNT(*)
+        FROM 
+        users
+
+        JOIN
+        question_likes ON users.id = question_likes.user_id
+
+        WHERE
+        question_likes.question_id = ?
+        SQL
+
+        likers.first.first
+    end
+
+    def self.liked_questions_for_user_id(user_id)
+        questions = QuestionsDatabase.instance.execute(<<-SQL, user_id)
+        SELECT
+        *
+        FROM 
+        questions
+        JOIN
+        question_likes ON question_likes.question_id = question.id
+        WHERE
+        question_likes.user_id = ?
+        SQL
+        questions.map{ |question| Question.new(question) }
     end
 
     def initialize(options)
